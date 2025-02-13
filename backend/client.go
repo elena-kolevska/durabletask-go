@@ -165,7 +165,10 @@ func (c *backendClient) TerminateOrchestration(ctx context.Context, id api.Insta
 	if err := c.be.AddNewOrchestrationEvent(ctx, id, e); err != nil {
 		return fmt.Errorf("failed to submit termination request:: %w", err)
 	}
-	return nil
+
+	_, err := c.waitForOrchestrationCondition(ctx, id, api.OrchestrationMetadataIsComplete)
+
+	return err
 }
 
 // RaiseEvent implements TaskHubClient and sends an asynchronous event notification to a waiting orchestration.
@@ -217,7 +220,16 @@ func (c *backendClient) SuspendOrchestration(ctx context.Context, id api.Instanc
 	if err := c.be.AddNewOrchestrationEvent(ctx, id, e); err != nil {
 		return fmt.Errorf("failed to suspend orchestration: %w", err)
 	}
-	return nil
+
+	_, err := c.waitForOrchestrationCondition(ctx, id, func(metadata *OrchestrationMetadata) bool {
+		return metadata.RuntimeStatus == protos.OrchestrationStatus_ORCHESTRATION_STATUS_SUSPENDED ||
+			metadata.RuntimeStatus == protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED ||
+			metadata.RuntimeStatus == protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED ||
+			metadata.RuntimeStatus == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED ||
+			metadata.RuntimeStatus == protos.OrchestrationStatus_ORCHESTRATION_STATUS_CANCELED
+	})
+
+	return err
 }
 
 // ResumeOrchestration resumes an orchestration instance that was previously suspended.
@@ -238,7 +250,16 @@ func (c *backendClient) ResumeOrchestration(ctx context.Context, id api.Instance
 	if err := c.be.AddNewOrchestrationEvent(ctx, id, e); err != nil {
 		return fmt.Errorf("failed to resume orchestration: %w", err)
 	}
-	return nil
+
+	_, err := c.waitForOrchestrationCondition(ctx, id, func(metadata *OrchestrationMetadata) bool {
+		return metadata.RuntimeStatus == protos.OrchestrationStatus_ORCHESTRATION_STATUS_RUNNING ||
+			metadata.RuntimeStatus == protos.OrchestrationStatus_ORCHESTRATION_STATUS_COMPLETED ||
+			metadata.RuntimeStatus == protos.OrchestrationStatus_ORCHESTRATION_STATUS_FAILED ||
+			metadata.RuntimeStatus == protos.OrchestrationStatus_ORCHESTRATION_STATUS_TERMINATED ||
+			metadata.RuntimeStatus == protos.OrchestrationStatus_ORCHESTRATION_STATUS_CANCELED
+	})
+
+	return err
 }
 
 // PurgeOrchestrationState deletes the state of the specified orchestration instance.
